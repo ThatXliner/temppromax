@@ -54,6 +54,15 @@ Key properties:
 
 The PMU temperature sensors are surfaced as HID events by the firmware on Apple Silicon — a System Management Controller vestige now baked into the HID subsystem. Apple never documents it, but Stats.app has used this API for years.
 
+### Sources
+
+None of this is officially documented; it relies on community reverse-engineering. The references below back up the HID approach and the CPU-only / SMC-for-GPU split:
+
+- [exelban/stats — `Modules/Sensors/reader.m`](https://github.com/exelban/stats/blob/master/Modules/Sensors/reader.m) — the `IOHIDEventSystemClient` read path this tool is modeled on.
+- [exelban/stats — `Modules/Sensors/values.swift`](https://github.com/exelban/stats/blob/master/Modules/Sensors/values.swift) — sensor-key map showing GPU temps (`Tg0…`) come from the SMC, not HID.
+- [aristocratos/btop#1653](https://github.com/aristocratos/btop/issues/1653) — confirms Apple Silicon GPU temperature is an SMC `flt` value, unavailable over the HID path.
+- [fermion-star/apple_sensors](https://github.com/fermion-star/apple_sensors) — early M1 reverse-engineering of the PMU HID temperature sensors.
+
 ## Build
 
 ```sh
