@@ -138,6 +138,19 @@
       .install .c {
         color: var(--muted);
       }
+      .note {
+        margin: 14px 2px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      code {
+        font-family: var(--mono);
+        font-size: 0.9em;
+        background: var(--panel-2);
+        padding: 1px 6px;
+        border-radius: 5px;
+        color: #cbd5e1;
+      }
       .grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -253,6 +266,19 @@ sudo mv temppromax /usr/local/bin/
 
 <span class="c"># Run it</span>
 temppromax</pre>
+        </div>
+        <p class="note">
+          The binary isn't notarized yet. The <code>curl</code> command above
+          runs without any prompt. But if you download the
+          <code>.tar.gz</code> from the
+          <a href="https://github.com/ThatXliner/temppromax/releases/latest"
+            >releases page</a
+          >
+          in a browser, macOS quarantines it — clear the flag before running:
+        </p>
+        <div class="install">
+          <pre><span class="c"># Only needed for browser downloads</span>
+xattr -d com.apple.quarantine temppromax</pre>
         </div>
       </section>
 
