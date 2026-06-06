@@ -87,7 +87,7 @@ temppromax [--die] [--simple] [--average | --high | --low] [--json] [--watch[=N]
 Options:
 
 - `--die`: only show die temperature sensors (`tdie*`).
-- `--simple`: print one sensor per line with no headers, thermal state, or system info — handy for scripting. Honors `--die`.
+- `--simple`: print one sensor per line with no headers or thermal state — handy for scripting. Honors `--die`.
 - `--average`: print a single average over the shown sensors instead of the table.
 - `--high`: print the single highest of the shown sensors.
 - `--low`: print the single lowest of the shown sensors.
