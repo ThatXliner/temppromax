@@ -6,6 +6,9 @@
 
 `temppromax` is a macOS command-line temperature monitor for Apple Silicon Macs. It reads PMU temperature sensors through the HID Event System and does not require sudo, launchd, or any privileged helper.
 
+> [!NOTE]
+> `temppromax` reports **CPU/die temperatures only**. The PMU sensors it reads over the HID Event System (`tdie`, `tdev`, surface) are the CPU/die package sensors. GPU temperatures on Apple Silicon are only exposed through the SMC (keys like `Tg0…`), the private API this tool deliberately avoids — so there is no GPU reading available through the no-sudo HID path. GPU support is out of scope for now.
+
 ## How it compares
 
 Most temperature tools predate Apple Silicon and rely on the SMC private API, which is no longer the temperature source on M-series Macs. `temppromax` instead uses `IOHIDEventSystemClient` — the same approach Stats.app uses — to read PMU sensors surfaced as HID events.
