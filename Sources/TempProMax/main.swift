@@ -81,11 +81,6 @@ private enum SensorCategory: String, Codable, CaseIterable {
     }
 }
 
-private struct MemoryStats: Codable {
-    let freeBytes: UInt64
-    let totalBytes: UInt64
-}
-
 private struct TemperatureGroups: Codable {
     var die: [SensorReading]
     var device: [SensorReading]
@@ -109,22 +104,20 @@ private struct TemperatureGroups: Codable {
     }
 }
 
-private struct SystemStats: Codable {
-    let uptimeSeconds: TimeInterval
-    let uptime: String
-    let loadAverage: [Double]
-    let memory: MemoryStats
-}
-
 private struct Snapshot: Codable {
     let timestamp: Date
     let temperatures: TemperatureGroups
     let thermalState: [String]
-    let system: SystemStats
 }
 
 private struct TerminalStyle {
     let enabled: Bool
+    let truecolor: Bool
+
+    init(enabled: Bool, truecolor: Bool = false) {
+        self.enabled = enabled
+        self.truecolor = enabled && truecolor
+    }
 
     var reset: String { enabled ? "\u{001B}[0m" : "" }
     var bold: String { enabled ? "\u{001B}[1m" : "" }
@@ -133,6 +126,13 @@ private struct TerminalStyle {
     var green: String { enabled ? "\u{001B}[32m" : "" }
     var yellow: String { enabled ? "\u{001B}[33m" : "" }
     var red: String { enabled ? "\u{001B}[31m" : "" }
+
+    func rgb(_ red: Int, _ green: Int, _ blue: Int) -> String {
+        guard enabled else {
+            return ""
+        }
+        return "\u{001B}[38;2;\(red);\(green);\(blue)m"
+    }
 }
 
 private let celsiusUnit = "\u{00B0}C"
@@ -233,8 +233,7 @@ private func makeSnapshot(dieOnly: Bool, probeTimeout: TimeInterval, waitFullDur
     return Snapshot(
         timestamp: Date(),
         temperatures: TemperatureGroups(readings: readings),
-        thermalState: readThermalState(),
-        system: readSystemStats()
+        thermalState: readThermalState()
     )
 }
 
@@ -356,46 +355,6 @@ private func readThermalState() -> [String] {
     return ["pmset -g therm returned no output"]
 }
 
-private func readSystemStats() -> SystemStats {
-    let uptimeSeconds = ProcessInfo.processInfo.systemUptime
-    return SystemStats(
-        uptimeSeconds: uptimeSeconds,
-        uptime: formatUptime(uptimeSeconds),
-        loadAverage: readLoadAverage(),
-        memory: readMemoryStats()
-    )
-}
-
-private func readLoadAverage() -> [Double] {
-    var loads = [Double](repeating: 0, count: 3)
-    let count = getloadavg(&loads, Int32(loads.count))
-    if count <= 0 {
-        return []
-    }
-    return Array(loads.prefix(Int(count)))
-}
-
-private func readMemoryStats() -> MemoryStats {
-    var stats = vm_statistics64()
-    var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.stride / MemoryLayout<integer_t>.stride)
-
-    let result = withUnsafeMutablePointer(to: &stats) { pointer in
-        pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { reboundPointer in
-            host_statistics64(mach_host_self(), HOST_VM_INFO64, reboundPointer, &count)
-        }
-    }
-
-    let pageSize = UInt64(vm_kernel_page_size)
-    let total = ProcessInfo.processInfo.physicalMemory
-
-    guard result == KERN_SUCCESS else {
-        return MemoryStats(freeBytes: 0, totalBytes: total)
-    }
-
-    let availablePages = UInt64(stats.free_count + stats.inactive_count + stats.speculative_count)
-    return MemoryStats(freeBytes: availablePages * pageSize, totalBytes: total)
-}
-
 private func runCommand(_ executable: String, arguments: [String]) -> (output: String, error: String) {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: executable)
@@ -450,16 +409,16 @@ private func printText(_ snapshot: Snapshot, options: Options, style: TerminalSt
     for line in snapshot.thermalState {
         print("  \(line)")
     }
-
-    let load = snapshot.system.loadAverage.map { String(format: "%.2f", $0) }.joined(separator: " ")
-    print("\n\(style.bold)System:\(style.reset)")
-    print("  up \(snapshot.system.uptime), load: \(load)")
-    print("  \(formatBytes(snapshot.system.memory.freeBytes)) free / \(formatBytes(snapshot.system.memory.totalBytes))")
 }
 
 private func temperatureColor(_ celsius: Double, style: TerminalStyle) -> String {
     guard style.enabled else {
         return ""
+    }
+
+    if style.truecolor {
+        let (red, green, blue) = temperatureSpectrum(celsius)
+        return style.rgb(red, green, blue)
     }
 
     if celsius >= 90 {
@@ -473,6 +432,41 @@ private func temperatureColor(_ celsius: Double, style: TerminalStyle) -> String
     return style.green
 }
 
+// Interpolates green -> yellow -> red across gradientFloor...gradientCeiling,
+// clamped at both ends, for truecolor terminals.
+private let gradientFloor = 30.0
+private let gradientCeiling = 95.0
+
+private func temperatureSpectrum(_ celsius: Double) -> (Int, Int, Int) {
+    let span = gradientCeiling - gradientFloor
+    let fraction = min(max((celsius - gradientFloor) / span, 0), 1)
+
+    // 0.0 -> green (63, 185, 80), 0.5 -> yellow (255, 209, 71), 1.0 -> red (255, 64, 53)
+    let green = (red: 63.0, green: 185.0, blue: 80.0)
+    let yellow = (red: 255.0, green: 209.0, blue: 71.0)
+    let red = (red: 255.0, green: 64.0, blue: 53.0)
+
+    let stop: (red: Double, green: Double, blue: Double)
+    let next: (red: Double, green: Double, blue: Double)
+    let localFraction: Double
+
+    if fraction < 0.5 {
+        stop = green
+        next = yellow
+        localFraction = fraction / 0.5
+    } else {
+        stop = yellow
+        next = red
+        localFraction = (fraction - 0.5) / 0.5
+    }
+
+    func lerp(_ from: Double, _ to: Double) -> Int {
+        Int((from + (to - from) * localFraction).rounded())
+    }
+
+    return (lerp(stop.red, next.red), lerp(stop.green, next.green), lerp(stop.blue, next.blue))
+}
+
 private func printJSON(_ snapshot: Snapshot) throws {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -481,32 +475,6 @@ private func printJSON(_ snapshot: Snapshot) throws {
     if let text = String(data: data, encoding: .utf8) {
         print(text)
     }
-}
-
-private func formatUptime(_ seconds: TimeInterval) -> String {
-    let totalMinutes = Int(seconds / 60)
-    let days = totalMinutes / (24 * 60)
-    let hours = (totalMinutes / 60) % 24
-    let minutes = totalMinutes % 60
-
-    var parts: [String] = []
-    if days > 0 {
-        parts.append("\(days) \(days == 1 ? "day" : "days")")
-    }
-
-    parts.append(String(format: "%d:%02d", hours, minutes))
-    return parts.joined(separator: ", ")
-}
-
-private func formatBytes(_ bytes: UInt64) -> String {
-    let gibibyte = 1024.0 * 1024.0 * 1024.0
-    let value = Double(bytes) / gibibyte
-
-    if value >= 10 {
-        return "\(Int(value.rounded())) GB"
-    }
-
-    return String(format: "%.1f GB", value)
 }
 
 private func terminalSupportsColor(noColor: Bool) -> Bool {
@@ -524,6 +492,11 @@ private func terminalSupportsColor(noColor: Bool) -> Bool {
 
     let term = ProcessInfo.processInfo.environment["TERM"] ?? ""
     return !term.isEmpty && term != "dumb"
+}
+
+private func terminalSupportsTrueColor() -> Bool {
+    let colorTerm = ProcessInfo.processInfo.environment["COLORTERM"]?.lowercased() ?? ""
+    return colorTerm == "truecolor" || colorTerm == "24bit"
 }
 
 private func shownReadings(_ snapshot: Snapshot, options: Options) -> [SensorReading] {
@@ -576,7 +549,10 @@ private func run(options: Options) throws -> ExitCode {
         return .success
     }
 
-    let style = TerminalStyle(enabled: terminalSupportsColor(noColor: options.noColor || options.json))
+    let style = TerminalStyle(
+        enabled: terminalSupportsColor(noColor: options.noColor || options.json),
+        truecolor: terminalSupportsTrueColor()
+    )
 
     if let interval = options.watchInterval {
         while true {
