@@ -10,14 +10,14 @@
 
 Most temperature tools predate Apple Silicon and rely on the SMC private API, which is no longer the temperature source on M-series Macs. `temppromax` instead uses `IOHIDEventSystemClient` — the same approach Stats.app uses — to read PMU sensors surfaced as HID events.
 
-| Tool | API used | Apple Silicon | sudo | Entitlements | Daemon | Over SSH |
+| Tool | API used | Apple Silicon | Doesn't require sudo? | Entitlements | Daemon | Over SSH |
 | --- | --- | --- | --- | --- | --- | --- |
-| **temppromax** | `IOHIDEventSystemClient` (HID events) | ✅ | ❌ none | ❌ none | ❌ none | ✅ |
-| `osx-cpu-temp` | SMC private API (`IOServiceOpen`) | ❌ prints 0°C | ❌ | ❌ | ❌ | ✅ |
-| `istats` | SMC private API | ❌ | ❌ | ❌ | ❌ | ✅ |
-| `powermetrics` | built-in sampler | ⚠️ verbose firehose | ✅ required | ❌ | ❌ | ⚠️ needs `-t` + TTY |
+| **temppromax** | `IOHIDEventSystemClient` (HID events) | ✅ | ✅ | ❌ none | ❌ none | ✅ |
+| `osx-cpu-temp` | SMC private API (`IOServiceOpen`) | ❌ prints 0°C | ✅ | ❌ | ❌ | ✅ |
+| `istats` | SMC private API | ❌ | ✅ | ❌ | ❌ | ✅ |
+| `powermetrics` | built-in sampler | ⚠️ verbose firehose | ❌ required | ❌ | ❌ | ⚠️ needs `-t` + TTY |
 | SMC private API | `IOServiceOpen("AppleSMC")` | ❌ `kIOReturnNotAllowed` | — | — | — | — |
-| `IOHIDManager` | standard HID API | ⚠️ | ✅ or | `com.apple.hid.manager.user-access` | ❌ | ✅ |
+| `IOHIDManager` | standard HID API | ⚠️ | ❌ or | `com.apple.hid.manager.user-access` | ❌ | ✅ |
 
 ### Approaches that did not work
 
