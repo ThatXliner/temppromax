@@ -8,9 +8,30 @@ private enum ExitCode: Int32 {
     case usage = 64
 }
 
+private enum Aggregate: String {
+    case average
+    case high
+    case low
+
+    var flag: String { "--\(rawValue)" }
+
+    func reduce(_ values: [Double]) -> Double {
+        switch self {
+        case .average:
+            return values.reduce(0, +) / Double(values.count)
+        case .high:
+            return values.max() ?? 0
+        case .low:
+            return values.min() ?? 0
+        }
+    }
+}
+
 private struct Options {
     var dieOnly = false
     var json = false
+    var simple = false
+    var aggregate: Aggregate?
     var watchInterval: TimeInterval?
     var noColor = false
     var help = false
@@ -20,6 +41,7 @@ private enum ArgumentError: Error, CustomStringConvertible {
     case unknown(String)
     case missingValue(String)
     case invalidInterval(String)
+    case conflictingAggregate(String, String)
 
     var description: String {
         switch self {
@@ -29,6 +51,8 @@ private enum ArgumentError: Error, CustomStringConvertible {
             return "Missing value for \(flag)"
         case .invalidInterval(let value):
             return "Invalid watch interval: \(value)"
+        case .conflictingAggregate(let first, let second):
+            return "\(first) and \(second) are mutually exclusive"
         }
     }
 }
@@ -125,6 +149,14 @@ private func parseOptions(_ arguments: [String]) throws -> Options {
             options.dieOnly = true
         case "--json":
             options.json = true
+        case "--simple":
+            options.simple = true
+        case "--average", "--high", "--low":
+            let aggregate = Aggregate(rawValue: String(argument.dropFirst(2)))!
+            if let existing = options.aggregate, existing != aggregate {
+                throw ArgumentError.conflictingAggregate(existing.flag, aggregate.flag)
+            }
+            options.aggregate = aggregate
         case "--no-color":
             options.noColor = true
         case "--help", "-h":
@@ -494,9 +526,45 @@ private func terminalSupportsColor(noColor: Bool) -> Bool {
     return !term.isEmpty && term != "dumb"
 }
 
+private func shownReadings(_ snapshot: Snapshot, options: Options) -> [SensorReading] {
+    var readings: [SensorReading] = []
+    for category in SensorCategory.allCases {
+        if options.dieOnly && category != .die {
+            continue
+        }
+        readings.append(contentsOf: snapshot.temperatures[category])
+    }
+    return readings
+}
+
+private func printSimple(_ snapshot: Snapshot, options: Options, style: TerminalStyle) {
+    let readings = shownReadings(snapshot, options: options)
+    let nameWidth = max(6, readings.map(\.name.count).max() ?? 6)
+
+    for reading in readings {
+        let color = temperatureColor(reading.celsius, style: style)
+        let paddedName = reading.name.padding(toLength: nameWidth, withPad: " ", startingAt: 0)
+        print("\(paddedName)  \(color)\(String(format: "%5.1f", reading.celsius))\(celsiusUnit)\(style.reset)")
+    }
+}
+
+private func printAggregate(_ snapshot: Snapshot, aggregate: Aggregate, options: Options, style: TerminalStyle) {
+    let values = shownReadings(snapshot, options: options).map(\.celsius)
+    guard !values.isEmpty else {
+        return
+    }
+    let result = aggregate.reduce(values)
+    let color = temperatureColor(result, style: style)
+    print("\(color)\(String(format: "%.1f", result))\(celsiusUnit)\(style.reset)")
+}
+
 private func render(_ snapshot: Snapshot, options: Options, style: TerminalStyle) throws {
     if options.json {
         try printJSON(snapshot)
+    } else if let aggregate = options.aggregate {
+        printAggregate(snapshot, aggregate: aggregate, options: options, style: style)
+    } else if options.simple {
+        printSimple(snapshot, options: options, style: style)
     } else {
         printText(snapshot, options: options, style: style)
     }
@@ -539,15 +607,23 @@ private func run(options: Options) throws -> ExitCode {
 private func printUsage() {
     print(
         """
-        Usage: temppromax [--die] [--json] [--watch[=N] | -w N] [--no-color]
+        Usage: temppromax [--die] [--simple] [--average | --high | --low]
+                          [--json] [--watch[=N] | -w N] [--no-color]
 
         Options:
           --die          Only show die temperature sensors.
+          --simple       Print one sensor per line, no headers or system info.
+          --average      Print a single average of the shown sensors.
+          --high         Print the single highest of the shown sensors.
+          --low          Print the single lowest of the shown sensors.
           --json         Print JSON instead of a table.
           --watch[=N]    Refresh in place every N seconds. Defaults to 2.
           -w N           Refresh in place every N seconds.
           --no-color     Disable ANSI color.
           -h, --help     Show this help.
+
+        --average, --high, and --low are mutually exclusive. temppromax reads
+        CPU/die temperatures only; GPU temps are not available (see README).
         """
     )
 }
