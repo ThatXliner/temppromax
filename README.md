@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="temppromax" width="480">
+</p>
+
 # temppromax
 
 `temppromax` is a macOS command-line temperature monitor for Apple Silicon Macs. It reads PMU temperature sensors through the HID Event System and does not require sudo, launchd, or any privileged helper.
