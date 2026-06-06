@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>temppromax — Apple Silicon temperature monitor</title>
+    <meta
+      name="description"
+      content="A macOS CLI temperature monitor for Apple Silicon. Reads PMU sensors via the HID Event System — no sudo, no entitlements, no daemon."
+    />
+    <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+    <meta property="og:title" content="temppromax" />
+    <meta
+      property="og:description"
+      content="Apple Silicon temperature monitor — no sudo, no entitlements, no daemon."
+    />
+    <meta property="og:type" content="website" />
+    <style>
+      :root {
+        --bg: #0b0f17;
+        --panel: #111827;
+        --panel-2: #1f2937;
+        --border: #2b3543;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --blue: #3b82f6;
+        --amber: #f59e0b;
+        --red: #ef4444;
+        --green: #22c55e;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: radial-gradient(
+            1200px 600px at 50% -200px,
+            rgba(245, 158, 11, 0.12),
+            transparent 60%
+          ),
+          var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+      a {
+        color: var(--amber);
+      }
+      .wrap {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+      header {
+        text-align: center;
+        padding: 72px 0 32px;
+      }
+      header img {
+        width: min(480px, 90vw);
+        height: auto;
+      }
+      .tagline {
+        margin: 24px auto 0;
+        max-width: 620px;
+        font-size: 19px;
+        color: var(--muted);
+      }
+      .cta {
+        display: flex;
+        gap: 14px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: 32px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        padding: 13px 22px;
+        border-radius: 11px;
+        font-weight: 650;
+        font-size: 15px;
+        text-decoration: none;
+        border: 1px solid transparent;
+        transition: transform 0.08s ease, filter 0.15s ease;
+      }
+      .btn:active {
+        transform: translateY(1px);
+      }
+      .btn-primary {
+        background: linear-gradient(135deg, var(--amber), var(--red));
+        color: #1a1206;
+      }
+      .btn-primary:hover {
+        filter: brightness(1.07);
+      }
+      .btn-ghost {
+        background: var(--panel);
+        border-color: var(--border);
+        color: var(--text);
+      }
+      .btn-ghost:hover {
+        border-color: #3b4757;
+      }
+      .arch {
+        margin-top: 14px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      section {
+        padding: 28px 0;
+      }
+      h2 {
+        font-size: 22px;
+        margin: 0 0 18px;
+      }
+      .install {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 4px 0;
+      }
+      .install pre {
+        margin: 0;
+        padding: 18px 20px;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 13.5px;
+        color: #cbd5e1;
+      }
+      .install .c {
+        color: var(--muted);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 18px 16px;
+      }
+      .card h3 {
+        margin: 0 0 6px;
+        font-size: 15px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex: none;
+      }
+      .term {
+        background: #0d1117;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .term-bar {
+        display: flex;
+        gap: 7px;
+        padding: 11px 14px;
+        background: var(--panel-2);
+        border-bottom: 1px solid var(--border);
+      }
+      .term-bar i {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        display: block;
+      }
+      .term pre {
+        margin: 0;
+        padding: 18px 20px;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      .hot {
+        color: var(--red);
+      }
+      .warm {
+        color: var(--amber);
+      }
+      .cool {
+        color: var(--green);
+      }
+      .head {
+        color: var(--text);
+        font-weight: 700;
+      }
+      .lbl {
+        color: var(--muted);
+      }
+      footer {
+        text-align: center;
+        color: var(--muted);
+        font-size: 13px;
+        padding: 48px 0 60px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <img src="assets/logo.svg" alt="temppromax" />
+        <p class="tagline">
+          A macOS command-line temperature monitor for Apple Silicon. Reads PMU
+          sensors through the HID Event System — no sudo, no entitlements, no
+          daemon.
+        </p>
+        <div class="cta">
+          <a
+            class="btn btn-primary"
+            href="https://github.com/ThatXliner/temppromax/releases/latest/download/temppromax-macos-arm64.tar.gz"
+            >↓ Download for macOS (arm64)</a
+          >
+          <a
+            class="btn btn-ghost"
+            href="https://github.com/ThatXliner/temppromax"
+            >View on GitHub</a
+          >
+        </div>
+        <p class="arch">Apple Silicon (M-series) · macOS 14+</p>
+      </header>
+
+      <section>
+        <h2>Install</h2>
+        <div class="install">
+          <pre><span class="c"># Download and extract the latest release</span>
+curl -fsSL https://github.com/ThatXliner/temppromax/releases/latest/download/temppromax-macos-arm64.tar.gz | tar -xz
+
+<span class="c"># Move it onto your PATH</span>
+sudo mv temppromax /usr/local/bin/
+
+<span class="c"># Run it</span>
+temppromax</pre>
+        </div>
+      </section>
+
+      <section>
+        <h2>What it looks like</h2>
+        <div class="term">
+          <div class="term-bar">
+            <i style="background: #ff5f56"></i>
+            <i style="background: #ffbd2e"></i>
+            <i style="background: #27c93f"></i>
+          </div>
+          <pre><span class="head">temppromax - Temperature Monitor</span>
+<span class="lbl">-----------------------------</span>
+
+<span class="head">Die Temperatures:</span>
+  tdie0    <span class="cool">48.2</span>°C
+  tdie1    <span class="warm">71.5</span>°C
+  tdie4    <span class="hot">91.3</span>°C
+
+<span class="head">Device Temperatures:</span>
+  tdev1    <span class="cool">42.0</span>°C
+  tdev3    <span class="cool">45.8</span>°C
+
+<span class="head">System:</span>
+  up 2 days, 6:14, load: 1.42 0.98 0.81
+  9.2 GB free / 16 GB</pre>
+        </div>
+      </section>
+
+      <section>
+        <h2>Why temppromax</h2>
+        <div class="grid">
+          <div class="card">
+            <h3><span class="dot" style="background: var(--green)"></span>No sudo</h3>
+            <p>Works as any user on Apple Silicon — no root, no password prompt.</p>
+          </div>
+          <div class="card">
+            <h3><span class="dot" style="background: var(--green)"></span>No entitlements</h3>
+            <p>Completely public API. Just links IOKit.framework.</p>
+          </div>
+          <div class="card">
+            <h3><span class="dot" style="background: var(--green)"></span>No daemon</h3>
+            <p>Pure user-space, one-shot binary. No launchd helper to install.</p>
+          </div>
+          <div class="card">
+            <h3><span class="dot" style="background: var(--amber)"></span>Real hardware temps</h3>
+            <p>Reads actual die, device, and surface PMU sensors from the firmware.</p>
+          </div>
+          <div class="card">
+            <h3><span class="dot" style="background: var(--blue)"></span>Works over SSH</h3>
+            <p>No TTY required. Pipe it, watch it, or emit JSON for scripts.</p>
+          </div>
+          <div class="card">
+            <h3><span class="dot" style="background: var(--amber)"></span>JSON &amp; watch</h3>
+            <p><code>--json</code> for tooling, <code>--watch</code> for live refresh.</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Usage</h2>
+        <div class="install">
+          <pre>temppromax [--die] [--json] [--watch[=N] | -w N] [--no-color]
+
+  <span class="c">--die</span>          Only show die temperature sensors.
+  <span class="c">--json</span>         Print JSON instead of a table.
+  <span class="c">--watch[=N]</span>    Refresh in place every N seconds. Defaults to 2.
+  <span class="c">-w N</span>           Refresh in place every N seconds.
+  <span class="c">--no-color</span>     Disable ANSI color.
+  <span class="c">-h, --help</span>     Show this help.</pre>
+        </div>
+      </section>
+    </div>
+
+    <footer>
+      <p>
+        <a href="https://github.com/ThatXliner/temppromax">github.com/ThatXliner/temppromax</a>
+        · Built with the IOHIDEventSystemClient API, the same approach Stats.app
+        uses.
+      </p>
+    </footer>
+  </body>
+</html>
